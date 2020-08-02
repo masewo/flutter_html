@@ -273,7 +273,7 @@ class HtmlParser extends StatelessWidget {
                 start: 0,
                 child: Text('${newContext.style.markerContent}\t',
                     textAlign: TextAlign.right,
-                    style: newContext.style.generateTextStyle()),
+                    style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor)),
               ),
               Padding(
                 padding: EdgeInsets.only(
@@ -284,7 +284,7 @@ class HtmlParser extends StatelessWidget {
                             ?.map((tree) => parseTree(newContext, tree))
                             ?.toList() ??
                         [],
-                    style: newContext.style.generateTextStyle(),
+                    style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
                   ),
                   style: newContext.style,
                 ),
@@ -317,7 +317,7 @@ class HtmlParser extends StatelessWidget {
           },
           child: StyledText(
             textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(),
+              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
               children: tree.children
                       .map((tree) => parseTree(newContext, tree))
                       .toList() ??
@@ -350,7 +350,7 @@ class HtmlParser extends StatelessWidget {
           offset: Offset(0, verticalOffset),
           child: StyledText(
             textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(),
+              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
               children: tree.children
                       .map((tree) => parseTree(newContext, tree))
                       .toList() ??
@@ -363,7 +363,7 @@ class HtmlParser extends StatelessWidget {
     } else {
       ///[tree] is an inline element.
       return TextSpan(
-        style: newContext.style.generateTextStyle(),
+        style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
         children:
             tree.children.map((tree) => parseTree(newContext, tree)).toList(),
       );
@@ -685,7 +685,7 @@ class ContainerSpan extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext _) {
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         border: style?.border,
@@ -699,7 +699,7 @@ class ContainerSpan extends StatelessWidget {
       child: child ??
           StyledText(
             textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(),
+              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context).textScaleFactor),
               children: children,
             ),
             style: newContext.style,
@@ -728,7 +728,7 @@ class StyledText extends StatelessWidget {
               : null,
       child: Text.rich(
         textSpan,
-        style: style.generateTextStyle(),
+        style: style.generateTextStyle(textScaleFactor: textScaleFactor),
         textAlign: style.textAlign,
         textDirection: style.direction,
         textScaleFactor: 1.0,
