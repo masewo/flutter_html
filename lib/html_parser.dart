@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:csslib/parser.dart' as cssparser;
 import 'package:csslib/visitor.dart' as css;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html/src/css_parser.dart';
@@ -15,7 +16,7 @@ import 'package:html/parser.dart' as htmlparser;
 import 'package:webview_flutter/webview_flutter.dart';
 
 typedef OnTap = void Function(String url);
-typedef CustomRender = Widget Function(
+typedef CustomRender = dynamic Function(
   RenderContext context,
   Widget parsedChild,
   Map<String, String> attributes,
@@ -149,7 +150,9 @@ class HtmlParser extends StatelessWidget {
         return parseReplacedElement(node, navigationDelegateForIframe);
       } else if (LAYOUT_ELEMENTS.contains(node.localName)) {
         return parseLayoutElement(node, children);
-      } else if (TABLE_STYLE_ELEMENTS.contains(node.localName)) {
+      } else if (TABLE_CELL_ELEMENTS.contains(node.localName)) {
+        return parseTableCellElement(node, children);
+      } else if (TABLE_DEFINITION_ELEMENTS.contains(node.localName)) {
         return parseTableDefinitionElement(node, children);
       } else if (customRenderTags.contains(node.localName)) {
         return parseStyledElement(node, children);
@@ -241,27 +244,33 @@ class HtmlParser extends StatelessWidget {
     );
 
     if (customRender?.containsKey(tree.name) ?? false) {
-      return WidgetSpan(
-        child: ContainerSpan(
+      final render = customRender[tree.name].call(
+        newContext,
+        ContainerSpan(
           newContext: newContext,
           style: tree.style,
           shrinkWrap: context.parser.shrinkWrap,
-          child: customRender[tree.name].call(
-            newContext,
-            ContainerSpan(
-              newContext: newContext,
-              style: tree.style,
-              shrinkWrap: context.parser.shrinkWrap,
-              children: tree.children
-                      ?.map((tree) => parseTree(newContext, tree))
-                      ?.toList() ??
-                  [],
-            ),
-            tree.attributes,
-            tree.element,
-          ),
+          children: tree.children
+                  ?.map((tree) => parseTree(newContext, tree))
+                  ?.toList() ??
+              [],
         ),
+        tree.attributes,
+        tree.element,
       );
+      if (render != null) {
+        assert(render is InlineSpan || render is Widget);
+        return render is InlineSpan
+            ? render
+            : WidgetSpan(
+                child: ContainerSpan(
+                  newContext: newContext,
+                  style: tree.style,
+                  shrinkWrap: context.parser.shrinkWrap,
+                  child: render,
+                ),
+              );
+      }
     }
 
     //Return the correct InlineSpan based on the element type.
@@ -292,7 +301,7 @@ class HtmlParser extends StatelessWidget {
                   start: 0,
                   child: Text('${newContext.style.markerContent}\t',
                       textAlign: TextAlign.right,
-                      style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor)),
+                      style: newContext.style.generateTextStyle()),
                 ),
               Padding(
                 padding: EdgeInsetsDirectional.only(
@@ -307,7 +316,7 @@ class HtmlParser extends StatelessWidget {
                             ?.map((tree) => parseTree(newContext, tree))
                             ?.toList() ??
                         [],
-                    style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
+                    style: newContext.style.generateTextStyle(),
                   ),
                   style: newContext.style,
                 ),
@@ -327,28 +336,39 @@ class HtmlParser extends StatelessWidget {
         );
       }
     } else if (tree is InteractableElement) {
-      return WidgetSpan(
-        child: RawGestureDetector(
-          gestures: {
-            MultipleTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                MultipleTapGestureRecognizer>(
-              () => MultipleTapGestureRecognizer(),
-              (instance) {
-                instance..onTap = () => onLinkTap?.call(tree.href);
-              },
-            ),
-          },
-          child: StyledText(
-            textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
-              children: tree.children
-                      .map((tree) => parseTree(newContext, tree))
-                      .toList() ??
-                  [],
-            ),
-            style: newContext.style,
-          ),
-        ),
+      return TextSpan(
+        children: tree.children
+                .map((tree) => parseTree(newContext, tree))
+                .map((childSpan) {
+              if (childSpan is TextSpan) {
+                return TextSpan(
+                  text: childSpan.text,
+                  children: childSpan.children,
+                  style: (childSpan.style ?? TextStyle())
+                      .merge(newContext.style.generateTextStyle()),
+                  semanticsLabel: childSpan.semanticsLabel,
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => onLinkTap?.call(tree.href),
+                );
+              } else {
+                return WidgetSpan(
+                  child: RawGestureDetector(
+                    gestures: {
+                      MultipleTapGestureRecognizer:
+                          GestureRecognizerFactoryWithHandlers<
+                              MultipleTapGestureRecognizer>(
+                        () => MultipleTapGestureRecognizer(),
+                        (instance) {
+                          instance..onTap = () => onLinkTap?.call(tree.href);
+                        },
+                      ),
+                    },
+                    child: (childSpan as WidgetSpan).child,
+                  ),
+                );
+              }
+            }).toList() ??
+            [],
       );
     } else if (tree is LayoutElement) {
       return WidgetSpan(
@@ -373,7 +393,7 @@ class HtmlParser extends StatelessWidget {
           offset: Offset(0, verticalOffset),
           child: StyledText(
             textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
+              style: newContext.style.generateTextStyle(),
               children: tree.children
                       .map((tree) => parseTree(newContext, tree))
                       .toList() ??
@@ -386,7 +406,7 @@ class HtmlParser extends StatelessWidget {
     } else {
       ///[tree] is an inline element.
       return TextSpan(
-        style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor),
+        style: newContext.style.generateTextStyle(),
         children:
             tree.children.map((tree) => parseTree(newContext, tree)).toList(),
       );
@@ -641,6 +661,8 @@ class HtmlParser extends StatelessWidget {
           child.text.trim().isEmpty &&
           lastChildBlock) {
         toRemove.add(child);
+      } else if (child.style.display == Display.NONE) {
+        toRemove.add(child);
       } else {
         _removeEmptyElements(child);
       }
@@ -708,7 +730,7 @@ class ContainerSpan extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext _) {
     return Container(
       decoration: BoxDecoration(
         border: style?.border,
@@ -722,7 +744,7 @@ class ContainerSpan extends StatelessWidget {
       child: child ??
           StyledText(
             textSpan: TextSpan(
-              style: newContext.style.generateTextStyle(textScaleFactor: MediaQuery.of(context).textScaleFactor),
+              style: newContext.style.generateTextStyle(),
               children: children,
             ),
             style: newContext.style,
@@ -751,10 +773,10 @@ class StyledText extends StatelessWidget {
               : null,
       child: Text.rich(
         textSpan,
-        style: style.generateTextStyle(textScaleFactor: textScaleFactor),
+        style: style.generateTextStyle(),
         textAlign: style.textAlign,
         textDirection: style.direction,
-        textScaleFactor: 1.0,
+        textScaleFactor: textScaleFactor,
       ),
     );
   }

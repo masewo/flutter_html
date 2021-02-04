@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -71,13 +72,18 @@ class ImageContentElement extends ReplacedElement {
     this.src,
     this.alt,
     dom.Element node,
-  }) : super(name: name, style: style, node: node);
+  }) : super(
+          name: name,
+          style: style,
+          node: node,
+          alignment: PlaceholderAlignment.middle,
+        );
 
   @override
   Widget toWidget(RenderContext context) {
     Widget imageWidget;
     if (src == null) {
-      imageWidget = Text(alt ?? "", style: context.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor));
+      imageWidget = Text(alt ?? "", style: context.style.generateTextStyle());
     } else if (src.startsWith("data:image") && src.contains("base64,")) {
       final decodedImage = base64.decode(src.split("base64,")[1].trim());
       precacheImage(
@@ -91,7 +97,7 @@ class ImageContentElement extends ReplacedElement {
         decodedImage,
         frameBuilder: (ctx, child, frame, _) {
           if (frame == null) {
-            return Text(alt ?? "", style: context.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor));
+            return Text(alt ?? "", style: context.style.generateTextStyle());
           }
           return child;
         },
@@ -109,11 +115,13 @@ class ImageContentElement extends ReplacedElement {
         assetPath,
         frameBuilder: (ctx, child, frame, _) {
           if (frame == null) {
-            return Text(alt ?? "", style: context.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor));
+            return Text(alt ?? "", style: context.style.generateTextStyle());
           }
           return child;
         },
       );
+    } else if (src.endsWith(".svg")) {
+      return SvgPicture.network(src);
     } else {
       precacheImage(
         NetworkImage(src),
@@ -122,13 +130,50 @@ class ImageContentElement extends ReplacedElement {
           context.parser.onImageError?.call(exception, stackTrace);
         },
       );
-      imageWidget = Image.network(
-        src,
-        frameBuilder: (ctx, child, frame, _) {
-          if (frame == null) {
-            return Text(alt ?? "", style: context.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor));
+      Completer<Size> completer = Completer();
+      Image image = Image.network(src, frameBuilder: (ctx, child, frame, _) {
+        if (frame == null) {
+          if (!completer.isCompleted) {
+            completer.completeError("error");
           }
           return child;
+        } else {
+          return child;
+        }
+      });
+      image.image.resolve(ImageConfiguration()).addListener(
+            ImageStreamListener((ImageInfo image, bool synchronousCall) {
+              var myImage = image.image;
+              Size size = Size(myImage.width.toDouble(), myImage.height.toDouble());
+              if (!completer.isCompleted) {
+                completer.complete(size);
+              }
+            }, onError: (object, stacktrace) {
+              if (!completer.isCompleted) {
+                completer.completeError(object);
+              }
+            }),
+          );
+      imageWidget = FutureBuilder<Size>(
+        future: completer.future,
+        builder: (BuildContext buildContext, AsyncSnapshot<Size> snapshot) {
+          if (snapshot.hasData) {
+            return new Image.network(
+              src,
+              width: snapshot.data.width,
+              frameBuilder: (ctx, child, frame, _) {
+                if (frame == null) {
+                  return Text(alt ?? "",
+                      style: context.style.generateTextStyle());
+                }
+                return child;
+              },
+            );
+          } else if (snapshot.hasError) {
+            return Text(alt ?? "", style: context.style.generateTextStyle());
+          } else {
+            return new CircularProgressIndicator();
+          }
         },
       );
     }
@@ -172,12 +217,15 @@ class IframeContentElement extends ReplacedElement {
 
   @override
   Widget toWidget(RenderContext context) {
+    final sandboxMode = attributes["sandbox"];
     return Container(
       width: width ?? (height ?? 150) * 2,
       height: height ?? (width ?? 300) / 2,
       child: WebView(
         initialUrl: src,
-        javascriptMode: JavascriptMode.unrestricted,
+        javascriptMode: sandboxMode == null || sandboxMode == "allow-scripts"
+            ? JavascriptMode.unrestricted
+            : JavascriptMode.disabled,
         navigationDelegate: navigationDelegate,
         gestureRecognizers: {
           Factory(() => PlatformViewVerticalGestureRecognizer())
@@ -254,20 +302,23 @@ class VideoContentElement extends ReplacedElement {
   Widget toWidget(RenderContext context) {
     final double _width = width ?? (height ?? 150) * 2;
     final double _height = height ?? (width ?? 300) / 2;
-    return Container(
-      child: Chewie(
-        controller: ChewieController(
-          videoPlayerController: VideoPlayerController.network(
-            src.first ?? "",
+    return AspectRatio(
+      aspectRatio: _width / _height,
+      child: Container(
+        child: Chewie(
+          controller: ChewieController(
+            videoPlayerController: VideoPlayerController.network(
+              src.first ?? "",
+            ),
+            placeholder: poster != null
+                ? Image.network(poster)
+                : Container(color: Colors.black),
+            autoPlay: autoplay,
+            looping: loop,
+            showControls: showControls,
+            autoInitialize: true,
+            aspectRatio: _width / _height,
           ),
-          placeholder: poster != null
-              ? Image.network(poster)
-              : Container(color: Colors.black),
-          autoPlay: autoplay,
-          looping: loop,
-          showControls: showControls,
-          autoInitialize: true,
-          aspectRatio: _width / _height,
         ),
       ),
     );
@@ -333,11 +384,11 @@ class RubyElement extends ReplacedElement {
                               Matrix4.translationValues(0, -(rubyYPos), 0),
                           child: Text(c.innerHtml,
                               style: context.style
-                                  .generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor)
+                                  .generateTextStyle()
                                   .copyWith(fontSize: rubySize))))),
               Container(
                   child: Text(textNode.text.trim(),
-                      style: context.style.generateTextStyle(textScaleFactor: MediaQuery.of(context.buildContext).textScaleFactor))),
+                      style: context.style.generateTextStyle())),
             ],
           );
           widgets.add(widget);
@@ -363,6 +414,9 @@ ReplacedElement parseReplacedElement(
         if (element.attributes['src'] != null) element.attributes['src'],
         ...ReplacedElement.parseMediaSources(element.children),
       ];
+      if (sources == null || sources.isEmpty || sources.first == null) {
+        return EmptyContentElement();
+      }
       return AudioContentElement(
         name: "audio",
         src: sources,
@@ -379,12 +433,12 @@ ReplacedElement parseReplacedElement(
       );
     case "iframe":
       return IframeContentElement(
-        name: "iframe",
-        src: element.attributes['src'],
-        width: double.tryParse(element.attributes['width'] ?? ""),
-        height: double.tryParse(element.attributes['height'] ?? ""),
-        navigationDelegate: navigationDelegateForIframe,
-      );
+          name: "iframe",
+          src: element.attributes['src'],
+          width: double.tryParse(element.attributes['width'] ?? ""),
+          height: double.tryParse(element.attributes['height'] ?? ""),
+          navigationDelegate: navigationDelegateForIframe,
+          node: element);
     case "img":
       return ImageContentElement(
         name: "img",
@@ -397,6 +451,9 @@ ReplacedElement parseReplacedElement(
         if (element.attributes['src'] != null) element.attributes['src'],
         ...ReplacedElement.parseMediaSources(element.children),
       ];
+      if (sources == null || sources.isEmpty || sources.first == null) {
+        return EmptyContentElement();
+      }
       return VideoContentElement(
         name: "video",
         src: sources,
