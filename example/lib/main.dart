@@ -63,25 +63,24 @@ const htmlData = """
       <table>
       <colgroup>
         <col width="50%" />
-        <col width="25%" />
-        <col width="25%" />
+        <col span="2" width="25%" />
       </colgroup>
       <thead>
       <tr><th>One</th><th>Two</th><th>Three</th></tr>
       </thead>
       <tbody>
       <tr>
-        <td>Data</td><td>Data</td><td>Data</td>
+        <td rowspan='2'>Rowspan\nRowspan\nRowspan\nRowspan\nRowspan\nRowspan\nRowspan\nRowspan\nRowspan\nRowspan</td><td>Data</td><td>Data</td>
       </tr>
       <tr>
-        <td>Data</td><td>Data</td><td>Data</td>
+        <td colspan="2"><img alt='Google' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png' /></td>
       </tr>
       </tbody>
       <tfoot>
       <tr><td>fData</td><td>fData</td><td>fData</td></tr>
       </tfoot>
       </table>
-      <h3>Custom Element Support:</h3>
+      <h3>Custom Element Support (inline: <bird></bird> and as block):</h3>
       <flutter></flutter>
       <flutter horizontal></flutter>
       <h3>SVG support:</h3>
@@ -120,8 +119,8 @@ const htmlData = """
       </p>
       <h3>Image support:</h3>
       <p>
-        <img alt='Google' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png' />
-        <a href='https://google.com'><img alt='Google' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png' /></a>
+        <img alt='Google' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png' /><br />
+        <a href='https://google.com'>A linked image: <img alt='Google' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png' /></a>
         <img alt='Alt Text of an intentionally broken image' src='https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30d' />
       </p>
       <h3>Video support:</h3>
@@ -168,10 +167,14 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             "td": Style(
               padding: EdgeInsets.all(6),
+              alignment: Alignment.topLeft,
             ),
             "var": Style(fontFamily: 'serif'),
           },
           customRender: {
+            "bird": (RenderContext context, Widget child, attributes, _) {
+              return TextSpan(text: "🐦");
+            },
             "flutter": (RenderContext context, Widget child, attributes, _) {
               return FlutterLogo(
                 style: (attributes['horizontal'] != null)
