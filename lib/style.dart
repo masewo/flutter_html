@@ -214,7 +214,7 @@ class Style {
     }
   }
 
-  TextStyle generateTextStyle({@required double textScaleFactor}) {
+  TextStyle generateTextStyle() {
     return TextStyle(
       backgroundColor: backgroundColor,
       color: color,
@@ -224,7 +224,7 @@ class Style {
       decorationThickness: textDecorationThickness,
       fontFamily: fontFamily,
       fontFeatures: fontFeatureSettings,
-      fontSize: fontSize != null ? fontSize.size * textScaleFactor : null,
+      fontSize: fontSize?.size,
       fontStyle: fontStyle,
       fontWeight: fontWeight,
       letterSpacing: letterSpacing,
